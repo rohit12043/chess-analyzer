@@ -1,7 +1,11 @@
 import sys
+import os
+from groq import Groq
 from pathlib import Path
 import chess.pgn as pgn
 import chess.engine
+from dotenv import load_dotenv
+load_dotenv()
 
 PGN_DIR = Path("pgns")
 
@@ -59,6 +63,23 @@ Blunders:
     prompt = header + lines + footer
     return prompt
 
+def analyze_game(prompt):
+    client = Groq(api_key=os.environ.get("GROQ_API_KEY"),)
+    chat_completion = client.chat.completions.create(
+        messages=[
+            {
+                "role": "system", 
+                "content": "You are a chess coach. Analyze blunders clearly and concisely."
+            },
+            {
+                "role": "user",
+                "content": prompt,
+            },
+        ],
+        model="llama-3.3-70b-versatile",
+        )
+    print(chat_completion.choices[0].message.content)
+    
 if __name__ == "__main__":
     filename = sys.argv[1]
     game = load_pgn(filename)
@@ -66,4 +87,4 @@ if __name__ == "__main__":
     Player = "white" if username == game.headers["White"] else "black"
     blunders = find_blunders(game, Player)
     prompt = build_prompt(blunders, game, Player)
-    print(prompt)
+    analyze_game(prompt)
