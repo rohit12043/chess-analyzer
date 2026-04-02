@@ -26,7 +26,9 @@ def find_blunders(game, player):
         for move in game.mainline_moves():
             turn = "white" if board.turn else "black"
             san = board.san(move)
-            before_score = engine.analyse(board, limit=chess.engine.Limit(depth=10))["score"].white().score()
+            info = engine.analyse(board, limit=chess.engine.Limit(depth=10))
+            before_score = info["score"].white().score()
+            best_move = board.san(info["pv"][0])
             board.push(move)
             after_score = engine.analyse(board, limit=chess.engine.Limit(depth=10))["score"].white().score()
             
@@ -39,6 +41,7 @@ def find_blunders(game, player):
                     "move_no": board.fullmove_number,
                     "before": before_score,
                     "after": after_score,
+                    "best_move": best_move,
                     "diff": diff,
                     "fen": board.fen()
                 })
@@ -49,7 +52,7 @@ def find_blunders(game, player):
 def build_prompt(blunders, game, player):
     lines = []
     for b in blunders:
-        line = f"- Move {b['move_no']}: {b['move']}, FEN: {b['fen']} (eval dropped from {b['before']:+} to {b['after']:+}, dropped by {abs(b['diff'])} centipawns)"
+        line = f"- Move {b['move_no']}: {b['move']} (best was {b['best_move']}, FEN: {b['fen']}, eval dropped from {b['before']:+} to {b['after']:+}, dropped by {abs(b['diff'])}cp)"
         lines.append(line)
     lines = "\n".join(lines)
     header = f"""Game: {game.headers["White"]} vs {game.headers["Black"]}
