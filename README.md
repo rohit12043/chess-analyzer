@@ -5,6 +5,10 @@ Analyzes the user's game, finds blunders and adds a layer of explainability to i
 ## How it works
 
 <img width="1365" height="469" alt="architecture" src="https://github.com/user-attachments/assets/5b3b3047-c978-4fcf-b9bc-980f4570c8cb" />
+## Features
+- Detects blunders, mistakes, and inaccuracies
+- Groq AI explanation per move
+- Save reports to file
 
 ## Requirements
 
@@ -29,6 +33,17 @@ python main.py your_game.pgn
 ```
 
 Then enter your username when prompted.
+
+With Flags:
+```bash
+python main.py your_game.pgn --player rohit --depth 12 --threshold 100 --save --no-ai
+```
+
+- `--player`: Playe username as it appears in the PGN file
+- `--depth`: Stockfish analysis depth. Higher = more accurate, slower. Default: 12
+- `--threshold`: Minimum centipawn loss to flag moves worth reporting
+- `--save`: Save the analysis report to outputs/
+- `--no-ai`: Skip Groq explanation, show engine results only.
 
 ## Example output
 
