@@ -1,5 +1,6 @@
 import argparse
 import os
+import math
 import sys
 from pathlib import Path
 
@@ -57,17 +58,28 @@ def classify_severity(loss):
     else:
         return "Okay"
 
+def calculate_win_percent(centipawns):
+    multiplier = -0.00368208
+    return 50 + 50 * (2/(1 + math.exp(multiplier * centipawns)) - 1)
+    
+def calculate_accuracy(centipawns_before, centipawns_after):
+    if(centipawns_after >= centipawns_before): return 100.0
+    win_percent_before = calculate_win_percent(centipawns_before)
+    win_percent_after = calculate_win_percent(centipawns_after)
+    
+    win_diff = win_percent_before - win_percent_after
+
+    accuracy_percent = 103.1668100711649 * math.exp(-0.04354415386753951 * win_diff) + -3.166924740191411
+
+    return max(0.0, min(100.0, accuracy_percent))
 
 def find_blunders(game, player, depth=12, threshold=150):
     engine = None
-
+    move_accuracies = []
     try:
         engine = chess.engine.SimpleEngine.popen_uci("stockfish")
         board = game.board()
         blunders = []
-
-        print("Move | Played   | Best     | Before  | After   | Loss | Severity")
-        print("-" * 75)
 
         for i, move in enumerate(game.mainline_moves(), start=1):
             turn = "white" if board.turn == chess.WHITE else "black"
@@ -89,13 +101,19 @@ def find_blunders(game, player, depth=12, threshold=150):
             if before_score is None or after_score is None:
                 continue
 
-            diff = after_score - before_score
-
+            
             if turn == player:
                 if turn == "white":
-                    loss = -diff
+                    cp_before = before_score
+                    cp_after = after_score
+                    loss = -(after_score - before_score)
                 else:
-                    loss = diff
+                    cp_before = before_score * -1
+                    cp_after = after_score * -1
+                    loss = after_score - before_score
+
+                move_acc = calculate_accuracy(cp_before, cp_after)
+                move_accuracies.append(move_acc)
 
                 severity = classify_severity(loss)
 
@@ -105,7 +123,7 @@ def find_blunders(game, player, depth=12, threshold=150):
                     )
                     print(
                         f"{move_no:<4} | {san:<8} | {str(best_move):<8} | "
-                        f"{before_score:<7} | {after_score:<7} | {loss:<6} | {severity}"
+                        f"{before_score:<7} | {after_score:<7} | {loss:<6} | {move_acc:.1f}% | {severity}"
                     )
                     blunders.append(
                         {
@@ -115,12 +133,18 @@ def find_blunders(game, player, depth=12, threshold=150):
                             "after": after_score,
                             "best_move": best_move,
                             "loss": loss,
+                            "accuracy": move_acc,
                             "severity": severity,
                             "fen": board.fen(),
                         }
                     )
 
-        return blunders
+        overall_accuracy = 100.0
+        if move_accuracies:
+            harmonic = len(move_accuracies)/sum(1.0/ max(0.01,i) for i in move_accuracies)
+            arithmetic = sum(move for move in move_accuracies)/len(move_accuracies)
+            overall_accuracy = round((harmonic+arithmetic)/2, 2)
+        return blunders, overall_accuracy
 
     finally:
         if engine:
@@ -159,13 +183,13 @@ def build_issue_table(blunders):
         return "No engine-detected issues."
 
     lines = []
-    lines.append("Move | Played   | Best     | Before  | After   | Loss   | Severity")
+    lines.append("Move | Played   | Best     | Before  | After   | Loss   | Accuracy   | Severity")
     lines.append("-" * 75)
 
     for b in blunders:
         lines.append(
             f"{b['move_no']:<4} | {b['move']:<8} | {str(b['best_move']):<8} | "
-            f"{b['before']:<7} | {b['after']:<7} | {b['loss']:<6} | {b['severity']}"
+            f"{b['before']:<7} | {b['after']:<7} | {b['loss']:<6} | {b['accuracy']:9.1f}% | {b['severity']}"
         )
 
     return "\n".join(lines)
@@ -239,12 +263,13 @@ if __name__ == "__main__":
     else:
         raise ValueError("Username not found in PGN headers.")
 
-    blunders = find_blunders(game, player, depth=args.depth, threshold=args.threshold)
+    blunders, accuracy = find_blunders(game, player, depth=args.depth, threshold=args.threshold)
     summary = build_summary(blunders, args.depth, args.threshold)
     print(summary)
-
+    print(f"YOUR OVERALL GAME ACCURACY: {accuracy}% \n")
     issue_table = build_issue_table(blunders)
     print(issue_table)
+    print()
 
     if not blunders:
         sys.exit(0)
